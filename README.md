@@ -1,66 +1,64 @@
+# GitOps Infrastructure
 
-### ТЗ: реализовать полный цикл деплоя и поддержки ПО (SRE) на уровне прода реальной компании (prod-like)
+Prod-like GitOps and DevSecOps playground built around a lightweight `k3s` cluster, GitHub Actions pipelines, FluxCD image automation, and a single-container web application.
 
-![alt text](img/diagram.png)
+![Architecture Diagram](img/diagram.png)
 
-#### Основной функционал:
-- Пользователь получает возможность полного управления реальным k8s (k3s) кластером и управлением рессурсов
-- Настроены CI/CD piplines для полного цикла DevSecOps
-- Сам кластер деплоется Ansible ролью, которая ыетчит дефолтные TLS ключи и позволяет управлять кластером с хоста как с мастер ноды
+Mermaid source for the current architecture is available in [`img/diagram.mmd`](img/diagram.mmd).
 
-#### Структура проекта:
-- /src - сурсы контейнера, место в котором ведется разработка
-- /Vagrant-k3s-cluster - общая дира для Vagrant VM и k3s
-- /Vagrant-k3s-cluster/ansible - ansible роль для авто раскатки кластера
-- /.github - все CI пайплайны для Github Actions
-- /FluxCD - манифесты для Image Updater в FluxCD
-- /k3s-manifest - манифесты деплоя в k3s
+## Overview
 
-#### Стек технологий
-- `nginx` - HTTP frontend внутри контейнера
-- `Docker` - сборка и упаковка приложения
-- `Kubernetes (k3s)` - целевая платформа деплоя
-- `Traefik Ingress` - входной трафик в кластер
-- `HorizontalPodAutoscaler` - автоскейлинг по CPU
-- `Ansible` - автоматическая раскатка кластера и kubeconfig
-- `Vagrant` + `libvirt` - локальный prod-like стенд на VM
+This repository demonstrates a full delivery loop for a small production-style platform:
 
-#### Темы курса
-- DevOps/CI-CD/VM and Docker/Deploy
+- infrastructure provisioning with `Vagrant` and `libvirt`
+- cluster bootstrap and host access with `Ansible`
+- application packaging with `Docker`
+- deployment to `k3s`
+- GitOps reconciliation with `FluxCD`
+- CI/CD automation with `GitHub Actions`
+- security checks in the delivery pipeline
 
-#### Входные и выходные данные
-- На фход полного workflow ползователь подает свои изменения в репозитории
-- На выход получаем деплой контейнера в production кластер
+The demo application lives in `src/` and is implemented as a `Go` service with `Gin`, served behind `nginx` inside a single container image.
 
-#### Роли участников
+## Tech Stack
 
-Группа: СКБ251
+- `Go` + `Gin` for the application API and HTML rendering
+- `nginx` as the in-container reverse proxy
+- `Docker` for image build and packaging
+- `k3s` as the target Kubernetes distribution
+- `Traefik Ingress` for inbound traffic routing
+- `HorizontalPodAutoscaler` for CPU-based scaling
+- `FluxCD` for GitOps reconciliation
+- `Ansible` for cluster bootstrap and kubeconfig setup
+- `Vagrant` + `libvirt` for the local VM environment
+- `GitHub Actions` for CI/CD and security automation
 
-- Ручкин Иван - DevSecOps + SRE + CloudeSec
+## Delivery Flow
 
-- Ганиева Милана - UX/UX Layout Designer
+1. A change is pushed to the repository.
+2. GitHub Actions runs security checks.
+3. The application image is built from `src/Dockerfile` and pushed to GHCR.
+4. The deployment manifest image tag is updated automatically.
+5. FluxCD reconciles the repository state into the `k3s` cluster.
+6. Kubernetes rolls out the new container version.
 
-- Яблоков Николай - С++ backend dev
+## Quick Start
 
----
-
-## Fast Start
-
-### 1. Поднимаем виртуалки
+### 1. Start the VMs
 
 ```bash
-cd ~/Projects-git/Metric2Deploy/Vagrant-k3s-cluster
+cd ~/Projects-git/GitOps-infrastructure/Vagrant-k3s-cluster
 vagrant up --provider=libvirt
 vagrant status
 ```
 
-### 2. Раскатывает k3s и тянем kubeconfig через Ansible-роль
+### 2. Bootstrap the `k3s` cluster with Ansible
 
 ```bash
 ansible-playbook -i ansible/inventory.ini ansible/k3s-claster.yml -v
 ```
 
-### 3. Сетапим саб-конфиг в глобальный KUBECONFIG через kubectx
+### 3. Select the cluster context
 
 ```bash
 unset KUBECONFIG
@@ -69,14 +67,19 @@ kubectx metric2deploy
 kubectl config set-context --current --namespace=default
 ```
 
-### 4. Деплой манифестов в кластер
+### 4. Deploy the application manifests
 
-```bash 
+```bash
 kubectl apply -f k3s-manifest/
 ```
-> Если используется KUBECONFIG проекта: `KUBECONFIG=~/.kube/metric2deploy.yaml kubectl apply -f k3s-manifest/`
 
-### 5. Установка FluxCD и деплой манифестов
+Or with an explicit kubeconfig:
+
+```bash
+KUBECONFIG=~/.kube/metric2deploy.yaml kubectl apply -f k3s-manifest/
+```
+
+### 5. Install FluxCD and apply GitOps resources
 
 ```bash
 flux install
@@ -84,11 +87,13 @@ kubectl apply -f FluxCD/
 kubectl get gitrepository,kustomization -n flux-system
 ```
 
-### 6. Поднимаем ngrok тунель
+### 6. Expose the environment with `ngrok`
 
 ```bash
 ngrok http 192.168.121.11:80
 ```
 
-![alt text](img/image.png)
-![alt text](img/ngrok.png)
+## Screenshots
+
+![App Screenshot](img/image.png)
+![ngrok Screenshot](img/ngrok.png)
